@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"fmt"
 	"net/http"
 
@@ -31,7 +32,49 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	fmt.Println("uploading thumbnail for video", videoID, "by user", userID)
 
-	// TODO: implement the upload here
+	const maxMemory = 10 << 20 // 10 MB using bit shifting
+	r.ParseMultipartForm(maxMemory)
 
-	respondWithJSON(w, http.StatusOK, struct{}{})
+	file, _, err := r.FormFile("thumbnail")
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
+		return
+	}
+	defer file.Close()
+	media_type := r.Header.Get("Content-Type")
+
+	byte_data, err := io.ReadAll(file)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to parse the file to byte data", err)
+		return
+	}
+
+	vide_metadata, err := cfg.db.GetVideo(videoID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Unable to retreive video metadata from database", err)
+		return
+	}
+	if vide_metadata.CreateVideoParams.UserID != userID {
+		respondWithError(w, http.StatusUnauthorized, "", err)
+		return
+	}
+
+	tn := thumbnail{
+		data:      byte_data,
+		mediaType: media_type,
+	}
+	videoThumbnails[videoID] = tn
+
+	tn_url := fmt.Sprintf("http://localhost:%s/api/thumbnails/%v", cfg.port, videoID)
+
+	vide_metadata.ThumbnailURL = &tn_url
+
+	err = cfg.db.UpdateVideo(vide_metadata)
+	if err != nil {
+		delete(videoThumbnails, videoID)
+		respondWithError(w, http.StatusBadRequest, "Unable to update metadata in database", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, vide_metadata)
 }
