@@ -7,7 +7,8 @@ import (
 	"mime"
 	"strings"
 	"net/http"
-	//"encoding/base64"
+	"encoding/base64"
+	"crypto/rand"
 	"path/filepath"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
@@ -93,7 +94,14 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	m_type_parts := strings.Split(m_type, "/")
-	file_name := fmt.Sprintf("%s.%s", videoID, m_type_parts[1])
+	key := make([]byte, 32)
+	_, err = rand.Read(key)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Failed to generate random filename", err)
+		return
+	}
+	name := base64.RawURLEncoding.EncodeToString(key)
+	file_name := fmt.Sprintf("%s.%s", name, m_type_parts[1])
 	file_path := filepath.Join(cfg.assetsRoot, file_name)
 	file_ptr, err := os.Create(file_path)
 	if err != nil {
