@@ -71,11 +71,11 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 
 	temp_file_ptr, err := os.CreateTemp("", "tubely-upload.mp4")
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Failed with temporary file creation opratiion", err)
+		respondWithError(w, http.StatusBadRequest, "Failed with temporary file creation opration", err)
 		return
 	}
-	defer os.Remove(temp_file_ptr.Name())
-	defer temp_file_ptr.Close()
+	//defer os.Remove(temp_file_ptr.Name())
+	//defer temp_file_ptr.Close()
 	reader := io.Reader(file)
 	writer := io.Writer(temp_file_ptr)
 	_, err = io.Copy(writer, reader)
@@ -83,8 +83,24 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "Failed to save video as temporary file", err)
 		return
 	}
-
 	temp_file_ptr.Seek(0, io.SeekStart)
+
+	ratio, err := getVideoAspectRatio(temp_file_ptr.Name())
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Failed to extract aspect ratio data from video file", err)
+		return
+	}
+	var dir_str string
+	switch ratio {
+		case "16:9":
+			dir_str = "landscape"
+		case "9:16":
+			dir_str = "portrait"
+		default:
+			dir_str = "other"
+	}
+	defer os.Remove(temp_file_ptr.Name())
+	defer temp_file_ptr.Close()
 
 	key := make([]byte, 32)
 	_, err = rand.Read(key)
@@ -93,7 +109,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	name := base64.RawURLEncoding.EncodeToString(key)
-	file_name := fmt.Sprintf("%s.mp4", name)
+	file_name := fmt.Sprintf("%s/%s.mp4",dir_str, name)
 
 	object_intput := s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
