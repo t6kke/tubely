@@ -74,8 +74,8 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "Failed with temporary file creation opration", err)
 		return
 	}
-	//defer os.Remove(temp_file_ptr.Name())
-	//defer temp_file_ptr.Close()
+	defer os.Remove(temp_file_ptr.Name())
+	defer temp_file_ptr.Close()
 	reader := io.Reader(file)
 	writer := io.Writer(temp_file_ptr)
 	_, err = io.Copy(writer, reader)
@@ -84,6 +84,16 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	temp_file_ptr.Seek(0, io.SeekStart)
+
+	processed_file_path, err := processVideoForFastStart(temp_file_ptr.Name())
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Failed to process the file for fast start", err)
+		return
+	}
+	defer os.Remove(processed_file_path)
+	processed_file, _ := os.Open(processed_file_path)
+	defer processed_file.Close()
+	pf_reader := io.Reader(processed_file)
 
 	ratio, err := getVideoAspectRatio(temp_file_ptr.Name())
 	if err != nil {
@@ -99,8 +109,6 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		default:
 			dir_str = "other"
 	}
-	defer os.Remove(temp_file_ptr.Name())
-	defer temp_file_ptr.Close()
 
 	key := make([]byte, 32)
 	_, err = rand.Read(key)
@@ -114,7 +122,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	object_intput := s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(file_name),
-		Body:        temp_file_ptr,
+		Body:        pf_reader,
 		ContentType: aws.String(media_type),
 	}
 

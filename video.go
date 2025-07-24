@@ -85,7 +85,6 @@ type ffmpegMetadata struct {
 
 
 func getVideoAspectRatio(filePath string) (string, error) {
-	//arg_str := fmt.Sprintf("-v", "error", "-print_format", "json", "-show_streams", filePath)
 	cmd := exec.Command("ffprobe","-v", "error", "-print_format", "json", "-show_streams", filePath)
 
 	var b bytes.Buffer
@@ -122,3 +121,16 @@ func calculatRatio(width, height int) string {
 			return "other"
 	}
 }
+
+func processVideoForFastStart(filePath string) (string, error) {
+	out_file_path := filePath + ".processing"
+
+	cmd := exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", out_file_path)
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+
+	return out_file_path, nil
+}
+
